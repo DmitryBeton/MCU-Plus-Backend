@@ -1,9 +1,11 @@
 import json
+import re
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, datetime, time
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from openpyxl import load_workbook
 
 from .models import Institute, ScheduleEntry, StudyGroup
 
@@ -14,6 +16,15 @@ class ImportSummary:
     groups_created: int = 0
     entries_created: int = 0
     entries_updated: int = 0
+
+
+def import_schedule_file(uploaded_file, default_institute_name=None):
+    file_name = uploaded_file.name.lower()
+    if file_name.endswith('.json'):
+        return import_schedule_json(uploaded_file)
+    if file_name.endswith('.xlsx'):
+        return import_schedule_xlsx(uploaded_file, default_institute_name=default_institute_name)
+    raise ValidationError('Поддерживаются только файлы .json и .xlsx.')
 
 
 def import_schedule_json(uploaded_file):
@@ -54,6 +65,52 @@ def import_schedule_json(uploaded_file):
                 },
             )
 
+            summary.institutes_created += int(institute_created)
+            summary.groups_created += int(group_created)
+            if entry_created:
+                summary.entries_created += 1
+            else:
+                summary.entries_updated += 1
+
+    return summary
+
+
+def import_schedule_xlsx(uploaded_file, default_institute_name=None):
+    try:
+        workbook = load_workbook(uploaded_file, data_only=True)
+    except Exception as error:
+        raise ValidationError('Не удалось прочитать Excel-файл.') from error
+
+    records = []
+    for worksheet in workbook.worksheets:
+        records.extend(_iter_excel_records(worksheet, default_institute_name))
+
+    if not records:
+        raise ValidationError('В Excel-файле не найдено ни одного занятия.')
+
+    summary = ImportSummary()
+    with transaction.atomic():
+        for record in records:
+            institute, institute_created = Institute.objects.get_or_create(
+                name=record['institute']
+            )
+            group, group_created = StudyGroup.objects.get_or_create(
+                institute=institute,
+                course=record['course'],
+                name=record['group'],
+            )
+            _entry, entry_created = ScheduleEntry.objects.update_or_create(
+                group=group,
+                date=record['date'],
+                start_time=record['start_time'],
+                end_time=record['end_time'],
+                subject=record['subject'],
+                defaults={
+                    'teacher': record['teacher'],
+                    'room': record['room'],
+                    'note': record['note'],
+                },
+            )
             summary.institutes_created += int(institute_created)
             summary.groups_created += int(group_created)
             if entry_created:
@@ -200,3 +257,134 @@ def _require_list(value, field_name):
     if not isinstance(value, list):
         raise ValidationError(f'Поле "{field_name}" должно быть списком.')
     return value
+
+
+def _iter_excel_records(worksheet, default_institute_name):
+    course, group_name = _parse_sheet_group(worksheet.title)
+    institute_name = _clean_text(default_institute_name) or 'Не указан'
+    header_rows = [
+        row
+        for row in range(1, worksheet.max_row + 1)
+        if 'день' in _clean_text(worksheet.cell(row=row, column=1).value).lower()
+        and 'дата' in _clean_text(worksheet.cell(row=row, column=1).value).lower()
+    ]
+
+    for header_row in header_rows:
+        dates_row = header_row + 1
+        date_columns = _extract_date_columns(worksheet, dates_row)
+        if not date_columns:
+            continue
+
+        next_header_row = min(
+            [row for row in header_rows if row > header_row] or [worksheet.max_row + 1]
+        )
+        for row in range(dates_row + 1, next_header_row):
+            time_range = _parse_excel_time_range(worksheet.cell(row=row, column=2).value)
+            if not time_range:
+                continue
+            start_time, end_time = time_range
+            for column, lesson_date in date_columns:
+                lesson_text = worksheet.cell(row=row, column=column).value
+                if not _clean_text(lesson_text):
+                    continue
+                lesson = _parse_excel_lesson_text(lesson_text)
+                yield {
+                    'institute': institute_name,
+                    'course': course,
+                    'group': group_name,
+                    'date': lesson_date,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    **lesson,
+                }
+
+
+def _parse_sheet_group(sheet_title):
+    normalized = _clean_text(sheet_title)
+    match = re.search(r'(?P<course>[1-6])\s*к\s+(?P<group>[А-ЯA-ZЁ0-9-]+)', normalized, re.IGNORECASE)
+    if not match:
+        raise ValidationError(
+            f'Не удалось определить курс и группу из названия листа "{sheet_title}".'
+        )
+    return int(match.group('course')), match.group('group').upper()
+
+
+def _extract_date_columns(worksheet, dates_row):
+    columns = []
+    for column in range(1, worksheet.max_column + 1):
+        value = worksheet.cell(row=dates_row, column=column).value
+        lesson_date = _excel_date(value)
+        if lesson_date:
+            columns.append((column, lesson_date))
+    return columns
+
+
+def _excel_date(value):
+    if isinstance(value, datetime):
+        value = value.date()
+    if isinstance(value, date) and 2000 <= value.year <= 2100:
+        return value
+    return None
+
+
+def _parse_excel_time_range(value):
+    text = _clean_text(value)
+    if not text:
+        return None
+    match = re.search(r'(?P<start>\d{1,2})[.:](?P<start_min>\d{2})\s*[-–]\s*(?P<end>\d{1,2})[.:](?P<end_min>\d{2})', text)
+    if not match:
+        return None
+    start_time = time(int(match.group('start')), int(match.group('start_min')))
+    end_time = time(int(match.group('end')), int(match.group('end_min')))
+    if end_time <= start_time:
+        return None
+    return start_time, end_time
+
+
+def _parse_excel_lesson_text(value):
+    parts = [
+        part.strip(' .')
+        for part in re.split(r'\s*\n+\s*', str(value))
+        if part and part.strip(' .')
+    ]
+    if not parts:
+        return {
+            'subject': 'Занятие',
+            'teacher': '',
+            'room': '',
+            'note': '',
+        }
+
+    notes = []
+    if re.fullmatch(r'\d+\s+подгруппа', parts[0], re.IGNORECASE):
+        notes.append(parts.pop(0))
+
+    subject = parts.pop(0) if parts else 'Занятие'
+    room = ''
+    lesson_type = ''
+    teacher_parts = []
+
+    for part in parts:
+        lower = part.lower()
+        if 'ауд' in lower or lower in {'дистанционно', 'онлайн'}:
+            room = part
+        elif part.upper() in {'ЛК', 'ПР', 'ЛБ', 'ЗАЧ', 'ЭКЗ'}:
+            lesson_type = part.upper()
+        else:
+            teacher_parts.append(part)
+
+    if lesson_type:
+        notes.append(lesson_type)
+
+    return {
+        'subject': subject,
+        'teacher': ' '.join(teacher_parts),
+        'room': room,
+        'note': ', '.join(notes),
+    }
+
+
+def _clean_text(value):
+    if value is None:
+        return ''
+    return re.sub(r'\s+', ' ', str(value)).strip()

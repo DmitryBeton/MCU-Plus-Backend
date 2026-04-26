@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .forms import GroupCreateForm, ScheduleEntryForm, ScheduleJsonUploadForm
-from .importers import import_schedule_json
+from .importers import import_schedule_file
 from .models import Institute, ScheduleEntry, StudyGroup
 
 
@@ -34,6 +34,9 @@ def home(request):
         selected_institute = selected_group.institute
         selected_course = selected_group.course
 
+    if request.method != 'POST' and selected_institute:
+        upload_form.fields['institute_name'].initial = selected_institute.name
+
     if request.method == 'POST':
         action = request.POST.get('action')
 
@@ -55,7 +58,14 @@ def home(request):
             upload_form = ScheduleJsonUploadForm(request.POST, request.FILES)
             if upload_form.is_valid():
                 try:
-                    summary = import_schedule_json(upload_form.cleaned_data['file'])
+                    default_institute_name = (
+                        upload_form.cleaned_data.get('institute_name')
+                        or (selected_institute.name if selected_institute else None)
+                    )
+                    summary = import_schedule_file(
+                        upload_form.cleaned_data['file'],
+                        default_institute_name=default_institute_name,
+                    )
                 except ValidationError as error:
                     messages.error(request, ' '.join(error.messages))
                 else:

@@ -1,9 +1,12 @@
 import json
+from datetime import date
+from io import BytesIO
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
+from openpyxl import Workbook
 
 from .models import Institute, ScheduleEntry, StudyGroup
 
@@ -137,6 +140,33 @@ class ScheduleManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(ScheduleEntry.objects.filter(id=entry.id).exists())
+
+    def test_edit_form_contains_delete_entry_action(self):
+        institute = Institute.objects.create(name='Институт цифрового образования')
+        group = StudyGroup.objects.create(
+            institute=institute,
+            course=2,
+            name='ИВТ-231',
+        )
+        entry = ScheduleEntry.objects.create(
+            group=group,
+            date='2026-09-01',
+            start_time='09:00',
+            end_time='10:30',
+            subject='Математический анализ',
+        )
+
+        response = self.client.get(reverse('home'), {
+            'institute': group.institute_id,
+            'course': group.course,
+            'group': group.id,
+            'edit': entry.id,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Удалить занятие')
+        self.assertContains(response, 'id="delete-edited-entry"')
+        self.assertContains(response, 'name="action" value="delete_entry"')
 
     def test_entry_end_time_must_be_later_than_start_time(self):
         institute = Institute.objects.create(name='Институт культуры')
@@ -330,6 +360,45 @@ class ScheduleManagementTests(TestCase):
         self.assertEqual(StudyGroup.objects.count(), 1)
         self.assertEqual(ScheduleEntry.objects.count(), 2)
         self.assertEqual(ScheduleEntry.objects.first().subject, 'Математический анализ')
+
+    def test_can_import_schedule_from_excel_file(self):
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = '2к ЦИБ-241'
+        worksheet['A8'] = 'день / неделя/дата'
+        worksheet['B8'] = 'время'
+        worksheet['C8'] = 1
+        worksheet['E8'] = 2
+        worksheet['C9'] = date(2026, 2, 9)
+        worksheet['E9'] = date(2026, 2, 16)
+        worksheet['A10'] = 'ПОНЕДЕЛЬНИК'
+        worksheet['B10'] = '9.00 - 10.20'
+        worksheet['C10'] = 'Математический анализ\nдоц., к.п.н.\nИванов И.И.\nЛК\nауд. 101'
+        worksheet['E10'] = '1 подгруппа\nАнглийский язык\nст. преп.\nПетров П.П.\nПР\nауд. 308 (Б)'
+        file_data = BytesIO()
+        workbook.save(file_data)
+        uploaded_file = SimpleUploadedFile(
+            'schedule.xlsx',
+            file_data.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+
+        response = self.client.post(reverse('home'), {
+            'action': 'import_schedule',
+            'institute_name': 'Институт тестового импорта',
+            'file': uploaded_file,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        group = StudyGroup.objects.get(name='ЦИБ-241')
+        self.assertEqual(group.course, 2)
+        self.assertEqual(group.institute.name, 'Институт тестового импорта')
+        self.assertEqual(ScheduleEntry.objects.count(), 2)
+        math_entry = ScheduleEntry.objects.get(subject='Математический анализ')
+        self.assertEqual(math_entry.teacher, 'доц., к.п.н Иванов И.И')
+        self.assertEqual(math_entry.room, 'ауд. 101')
+        english_entry = ScheduleEntry.objects.get(subject='Английский язык')
+        self.assertEqual(english_entry.note, '1 подгруппа, ПР')
 
     def test_can_import_nested_schedule_json_file(self):
         payload = {

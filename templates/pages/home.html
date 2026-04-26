@@ -66,12 +66,16 @@
 
                     {{ upload_form.non_field_errors }}
 
-                    <label for="{{ upload_form.file.id_for_label }}">JSON-файл</label>
+                    <label for="{{ upload_form.institute_name.id_for_label }}">Институт для Excel</label>
+                    {{ upload_form.institute_name }}
+                    {{ upload_form.institute_name.errors }}
+
+                    <label for="{{ upload_form.file.id_for_label }}">Файл расписания</label>
                     {{ upload_form.file }}
                     {{ upload_form.file.errors }}
 
-                    <p class="upload-note">Можно загрузить готовое расписание списком занятий или структурой институтов и групп.</p>
-                    <button type="submit">Загрузить JSON</button>
+                    <p class="upload-note">Можно загрузить JSON или Excel-файл учебного отдела. Для Excel курс и группа берутся из названия листа.</p>
+                    <button type="submit">Загрузить файл</button>
                 </form>
 
                 {% if selected_institute %}
@@ -249,12 +253,27 @@
                         <div class="form-actions">
                             <button type="submit">{% if edit_entry %}Сохранить изменения{% else %}Добавить занятие{% endif %}</button>
                             {% if edit_entry %}
+                                <button type="submit" class="danger-button" form="delete-edited-entry">
+                                    Удалить занятие
+                                </button>
                                 <a class="text-button" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}&view={{ view_mode }}{% if selected_start_date %}&start_date={{ selected_start_date|date:'Y-m-d' }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date|date:'Y-m-d' }}{% endif %}">
                                     Отменить
                                 </a>
                             {% endif %}
                         </div>
                     </form>
+
+                    {% if edit_entry %}
+                        <form id="delete-edited-entry" method="post" data-confirm="Удалить занятие {{ edit_entry.subject }}?">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_entry">
+                            <input type="hidden" name="group" value="{{ selected_group.id }}">
+                            <input type="hidden" name="entry" value="{{ edit_entry.id }}">
+                            <input type="hidden" name="view" value="{{ view_mode }}">
+                            <input type="hidden" name="start_date" value="{{ selected_start_date|date:'Y-m-d' }}">
+                            <input type="hidden" name="end_date" value="{{ selected_end_date|date:'Y-m-d' }}">
+                        </form>
+                    {% endif %}
 
                     {% if view_mode == 'table' %}
                         <div class="schedule-table-wrap">

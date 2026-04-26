@@ -263,6 +263,12 @@ button:hover {
     margin-bottom: 24px;
 }
 
+.filters select:disabled {
+    background: #f1f4f9;
+    color: #98a2b3;
+    cursor: not-allowed;
+}
+
 .filters label,
 .entry-form label,
 .stacked-form label {

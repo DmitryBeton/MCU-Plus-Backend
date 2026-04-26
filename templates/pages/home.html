@@ -59,10 +59,10 @@
             </aside>
 
             <section class="main-panel" aria-labelledby="schedule-title">
-                <form method="get" class="filters">
+                <form method="get" class="filters" data-schedule-filters>
                     <label>
                         Институт
-                        <select name="institute">
+                        <select name="institute" data-filter-field="institute">
                             <option value="">Все институты</option>
                             {% for institute in institutes %}
                                 <option value="{{ institute.id }}" {% if selected_institute.id == institute.id %}selected{% endif %}>
@@ -74,7 +74,7 @@
 
                     <label>
                         Курс
-                        <select name="course">
+                        <select name="course" data-filter-field="course" {% if not selected_institute %}disabled{% endif %}>
                             <option value="">Все курсы</option>
                             {% for course in courses %}
                                 <option value="{{ course }}" {% if selected_course == course %}selected{% endif %}>
@@ -86,7 +86,7 @@
 
                     <label>
                         Группа
-                        <select name="group">
+                        <select name="group" data-filter-field="group" {% if not selected_institute %}disabled{% endif %}>
                             <option value="">Выберите группу</option>
                             {% for group in groups %}
                                 <option value="{{ group.id }}" {% if selected_group.id == group.id %}selected{% endif %}>
@@ -96,7 +96,7 @@
                         </select>
                     </label>
 
-                    <button type="submit">Показать</button>
+                    <button type="submit" class="filters-submit">Показать</button>
                 </form>
 
                 <div class="section-heading">
@@ -230,5 +230,6 @@
             </section>
         </section>
     </main>
+    <script src="{% static 'js/schedule-filters.js' %}"></script>
 </body>
 </html>

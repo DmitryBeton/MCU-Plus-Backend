@@ -9,10 +9,10 @@ from .models import Institute, ScheduleEntry, StudyGroup
 
 @login_required
 def home(request):
-    selected_institute_id = request.GET.get('institute')
+    selected_institute_id = _as_int(request.GET.get('institute'))
     selected_course = _as_int(request.GET.get('course'))
-    selected_group_id = request.GET.get('group')
-    edit_entry_id = request.GET.get('edit')
+    selected_group_id = _as_int(request.GET.get('group'))
+    edit_entry_id = _as_int(request.GET.get('edit'))
     group_form = GroupCreateForm()
     entry_form = ScheduleEntryForm()
 

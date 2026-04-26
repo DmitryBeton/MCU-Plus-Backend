@@ -26,6 +26,42 @@ class HomePageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Расписание занятий')
 
+    def test_empty_filter_values_do_not_crash_home_page(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse('home'), {
+            'institute': '',
+            'course': '',
+            'group': '',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Выберите группу')
+
+    def test_selected_institute_loads_courses_and_groups(self):
+        self.client.force_login(self.user)
+        institute = Institute.objects.create(name='Институт цифрового образования')
+        StudyGroup.objects.create(institute=institute, course=1, name='ИВТ-101')
+        StudyGroup.objects.create(institute=institute, course=2, name='ИВТ-201')
+
+        response = self.client.get(reverse('home'), {
+            'institute': institute.id,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '1 курс')
+        self.assertContains(response, '2 курс')
+        self.assertContains(response, 'ИВТ-101')
+        self.assertContains(response, 'ИВТ-201')
+
+        response = self.client.get(reverse('home'), {
+            'institute': institute.id,
+            'course': '2',
+        })
+
+        self.assertContains(response, 'ИВТ-201')
+        self.assertNotContains(response, 'ИВТ-101')
+
 
 class ScheduleManagementTests(TestCase):
     def setUp(self):

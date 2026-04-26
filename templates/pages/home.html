@@ -77,6 +77,8 @@
 
             <section class="main-panel" aria-labelledby="schedule-title">
                 <form method="get" class="filters" data-schedule-filters>
+                    <input type="hidden" name="view" value="{{ view_mode }}">
+
                     <label>
                         Институт
                         <select name="institute" data-filter-field="institute">
@@ -113,6 +115,16 @@
                         </select>
                     </label>
 
+                    <label>
+                        С даты
+                        <input type="date" name="start_date" value="{{ selected_start_date|date:'Y-m-d' }}">
+                    </label>
+
+                    <label>
+                        По дату
+                        <input type="date" name="end_date" value="{{ selected_end_date|date:'Y-m-d' }}">
+                    </label>
+
                     <button type="submit" class="filters-submit">Показать</button>
                 </form>
 
@@ -131,6 +143,16 @@
                             <p>Создайте группу слева или выберите уже существующую.</p>
                         {% endif %}
                     </div>
+                    {% if selected_group %}
+                        <div class="view-switch" aria-label="Вид расписания">
+                            <a class="{% if view_mode == 'list' %}active{% endif %}" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}&view=list{% if selected_start_date %}&start_date={{ selected_start_date|date:'Y-m-d' }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date|date:'Y-m-d' }}{% endif %}">
+                                Список
+                            </a>
+                            <a class="{% if view_mode == 'table' %}active{% endif %}" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}&view=table{% if selected_start_date %}&start_date={{ selected_start_date|date:'Y-m-d' }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date|date:'Y-m-d' }}{% endif %}">
+                                Таблица
+                            </a>
+                        </div>
+                    {% endif %}
                 </div>
 
                 {% if selected_group %}
@@ -138,6 +160,9 @@
                         {% csrf_token %}
                         <input type="hidden" name="action" value="{% if edit_entry %}update_entry{% else %}create_entry{% endif %}">
                         <input type="hidden" name="group" value="{{ selected_group.id }}">
+                        <input type="hidden" name="view" value="{{ view_mode }}">
+                        <input type="hidden" name="start_date" value="{{ selected_start_date|date:'Y-m-d' }}">
+                        <input type="hidden" name="end_date" value="{{ selected_end_date|date:'Y-m-d' }}">
                         {% if edit_entry %}
                             <input type="hidden" name="entry" value="{{ edit_entry.id }}">
                         {% endif %}
@@ -191,53 +216,112 @@
                         <div class="form-actions">
                             <button type="submit">{% if edit_entry %}Сохранить изменения{% else %}Добавить занятие{% endif %}</button>
                             {% if edit_entry %}
-                                <a class="text-button" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}">
+                                <a class="text-button" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}&view={{ view_mode }}{% if selected_start_date %}&start_date={{ selected_start_date|date:'Y-m-d' }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date|date:'Y-m-d' }}{% endif %}">
                                     Отменить
                                 </a>
                             {% endif %}
                         </div>
                     </form>
 
-                    <div class="schedule-list">
-                        {% for entry in schedule_entries %}
-                            <article class="lesson-item">
-                                <div class="lesson-date">
-                                    <strong>{{ entry.date|date:"d.m" }}</strong>
-                                    <span>{{ entry.date|date:"D" }}</span>
+                    {% if view_mode == 'table' %}
+                        <div class="schedule-table-wrap">
+                            {% if schedule_table.rows %}
+                                <table class="schedule-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Дата</th>
+                                            {% for slot in schedule_table.time_slots %}
+                                                <th scope="col">
+                                                    <span>{{ forloop.counter }} пара</span>
+                                                    <small>{{ slot.0|time:"H:i" }} - {{ slot.1|time:"H:i" }}</small>
+                                                </th>
+                                            {% endfor %}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for row in schedule_table.rows %}
+                                            <tr>
+                                                <th scope="row">
+                                                    <strong>{{ row.date|date:"d.m.Y" }}</strong>
+                                                    <span>{{ row.weekday }}</span>
+                                                </th>
+                                                {% for cell in row.cells %}
+                                                    <td>
+                                                        {% for entry in cell.entries %}
+                                                            <article class="table-lesson">
+                                                                <h3>{{ entry.subject }}</h3>
+                                                                <p>
+                                                                    {% if entry.teacher %}{{ entry.teacher }}{% else %}Преподаватель не указан{% endif %}
+                                                                    {% if entry.room %} · {{ entry.room }}{% endif %}
+                                                                </p>
+                                                                {% if entry.note %}
+                                                                    <p>{{ entry.note }}</p>
+                                                                {% endif %}
+                                                                <a href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}&view=table{% if selected_start_date %}&start_date={{ selected_start_date|date:'Y-m-d' }}{% endif %}{% if selected_end_date %}&end_date={{ selected_end_date|date:'Y-m-d' }}{% endif %}&edit={{ entry.id }}">
+                                                                    Изменить
+                                                                </a>
+                                                            </article>
+                                                        {% empty %}
+                                                            <span class="empty-cell">-</span>
+                                                        {% endfor %}
+                                                    </td>
+                                                {% endfor %}
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            {% else %}
+                                <div class="blank-slate">
+                                    <h3>Занятий за выбранный период нет</h3>
+                                    <p>Измените период или добавьте первое занятие для этой группы.</p>
                                 </div>
-                                <div class="lesson-body">
-                                    <div class="lesson-topline">
-                                        <h3>{{ entry.subject }}</h3>
-                                        <span>{{ entry.start_time|time:"H:i" }} - {{ entry.end_time|time:"H:i" }}</span>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="schedule-list">
+                            {% for entry in schedule_entries %}
+                                <article class="lesson-item">
+                                    <div class="lesson-date">
+                                        <strong>{{ entry.date|date:"d.m" }}</strong>
+                                        <span>{{ entry.date|date:"D" }}</span>
                                     </div>
-                                    <p>
-                                        {% if entry.teacher %}{{ entry.teacher }}{% else %}Преподаватель не указан{% endif %}
-                                        {% if entry.room %} · {{ entry.room }}{% endif %}
-                                    </p>
-                                    {% if entry.note %}
-                                        <p class="lesson-note">{{ entry.note }}</p>
-                                    {% endif %}
-                                </div>
-                                <div class="lesson-actions">
-                                    <a class="text-button" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}&edit={{ entry.id }}">
-                                        Изменить
-                                    </a>
-                                    <form method="post">
-                                        {% csrf_token %}
+                                    <div class="lesson-body">
+                                        <div class="lesson-topline">
+                                            <h3>{{ entry.subject }}</h3>
+                                            <span>{{ entry.start_time|time:"H:i" }} - {{ entry.end_time|time:"H:i" }}</span>
+                                        </div>
+                                        <p>
+                                            {% if entry.teacher %}{{ entry.teacher }}{% else %}Преподаватель не указан{% endif %}
+                                            {% if entry.room %} · {{ entry.room }}{% endif %}
+                                        </p>
+                                        {% if entry.note %}
+                                            <p class="lesson-note">{{ entry.note }}</p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="lesson-actions">
+                                        <a class="text-button" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}&edit={{ entry.id }}">
+                                            Изменить
+                                        </a>
+                                        <form method="post">
+                                            {% csrf_token %}
                                         <input type="hidden" name="action" value="delete_entry">
                                         <input type="hidden" name="group" value="{{ selected_group.id }}">
                                         <input type="hidden" name="entry" value="{{ entry.id }}">
+                                        <input type="hidden" name="view" value="{{ view_mode }}">
+                                        <input type="hidden" name="start_date" value="{{ selected_start_date|date:'Y-m-d' }}">
+                                        <input type="hidden" name="end_date" value="{{ selected_end_date|date:'Y-m-d' }}">
                                         <button type="submit" class="danger-button">Удалить</button>
                                     </form>
+                                    </div>
+                                </article>
+                            {% empty %}
+                                <div class="blank-slate">
+                                    <h3>Занятий пока нет</h3>
+                                    <p>Добавьте первое занятие для выбранной группы. Каждая дата хранится отдельно, поэтому расписание может отличаться каждую неделю.</p>
                                 </div>
-                            </article>
-                        {% empty %}
-                            <div class="blank-slate">
-                                <h3>Занятий пока нет</h3>
-                                <p>Добавьте первое занятие для выбранной группы. Каждая дата хранится отдельно, поэтому расписание может отличаться каждую неделю.</p>
-                            </div>
-                        {% endfor %}
-                    </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
                 {% else %}
                     <div class="blank-slate">
                         <h3>Нет выбранной группы</h3>

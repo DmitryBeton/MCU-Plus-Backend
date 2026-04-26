@@ -159,6 +159,82 @@ class ScheduleManagementTests(TestCase):
         self.assertContains(response, 'Время окончания должно быть позже времени начала.')
         self.assertEqual(ScheduleEntry.objects.count(), 0)
 
+    def test_table_view_renders_schedule_by_dates_and_time_slots(self):
+        institute = Institute.objects.create(name='Институт цифрового образования')
+        group = StudyGroup.objects.create(
+            institute=institute,
+            course=2,
+            name='ИВТ-231',
+        )
+        ScheduleEntry.objects.create(
+            group=group,
+            date='2026-09-01',
+            start_time='09:00',
+            end_time='10:30',
+            subject='Математический анализ',
+            teacher='Иванов И.И.',
+            room='101',
+        )
+        ScheduleEntry.objects.create(
+            group=group,
+            date='2026-09-01',
+            start_time='10:40',
+            end_time='12:10',
+            subject='Программирование',
+            teacher='Петров П.П.',
+            room='202',
+        )
+
+        response = self.client.get(reverse('home'), {
+            'institute': group.institute_id,
+            'course': group.course,
+            'group': group.id,
+            'view': 'table',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Таблица')
+        self.assertContains(response, '1 пара')
+        self.assertContains(response, '09:00 - 10:30')
+        self.assertContains(response, '01.09.2026')
+        self.assertContains(response, 'Математический анализ')
+        self.assertContains(response, 'Программирование')
+
+    def test_period_filter_limits_table_entries(self):
+        institute = Institute.objects.create(name='Институт экономики')
+        group = StudyGroup.objects.create(
+            institute=institute,
+            course=1,
+            name='ЭК-101',
+        )
+        ScheduleEntry.objects.create(
+            group=group,
+            date='2026-09-01',
+            start_time='09:00',
+            end_time='10:30',
+            subject='Микроэкономика',
+        )
+        ScheduleEntry.objects.create(
+            group=group,
+            date='2026-10-01',
+            start_time='09:00',
+            end_time='10:30',
+            subject='Статистика',
+        )
+
+        response = self.client.get(reverse('home'), {
+            'institute': group.institute_id,
+            'course': group.course,
+            'group': group.id,
+            'view': 'table',
+            'start_date': '2026-10-01',
+            'end_date': '2026-10-31',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Статистика')
+        self.assertNotContains(response, 'Микроэкономика')
+
     def test_can_import_schedule_from_json_file(self):
         payload = {
             'entries': [

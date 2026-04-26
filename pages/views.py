@@ -1,3 +1,6 @@
+from datetime import date
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -15,6 +18,11 @@ def home(request):
     selected_course = _as_int(request.GET.get('course'))
     selected_group_id = _as_int(request.GET.get('group'))
     edit_entry_id = _as_int(request.GET.get('edit'))
+    view_mode = request.GET.get('view')
+    if view_mode not in {'list', 'table'}:
+        view_mode = 'list'
+    selected_start_date = _parse_iso_date(request.GET.get('start_date'))
+    selected_end_date = _parse_iso_date(request.GET.get('end_date'))
     group_form = GroupCreateForm()
     entry_form = ScheduleEntryForm()
     upload_form = ScheduleJsonUploadForm()
@@ -77,7 +85,12 @@ def home(request):
                 schedule_entry.group = selected_group
                 schedule_entry.save()
                 messages.success(request, 'Занятие сохранено.')
-                return redirect(_schedule_url(group=selected_group))
+                return redirect(_schedule_url(
+                    group=selected_group,
+                    view_mode=request.POST.get('view'),
+                    start_date=request.POST.get('start_date'),
+                    end_date=request.POST.get('end_date'),
+                ))
 
         elif action == 'delete_entry':
             selected_group = get_object_or_404(StudyGroup, id=request.POST.get('group'))
@@ -88,7 +101,12 @@ def home(request):
             )
             entry.delete()
             messages.success(request, 'Занятие удалено.')
-            return redirect(_schedule_url(group=selected_group))
+            return redirect(_schedule_url(
+                group=selected_group,
+                view_mode=request.POST.get('view'),
+                start_date=request.POST.get('start_date'),
+                end_date=request.POST.get('end_date'),
+            ))
 
     if selected_group:
         selected_institute = selected_group.institute
@@ -104,6 +122,7 @@ def home(request):
     courses = []
     groups = StudyGroup.objects.none()
     schedule_entries = ScheduleEntry.objects.none()
+    schedule_table = {'time_slots': [], 'rows': []}
 
     if selected_institute:
         courses = (
@@ -119,6 +138,11 @@ def home(request):
 
     if selected_group:
         schedule_entries = selected_group.schedule_entries.all()
+        if selected_start_date:
+            schedule_entries = schedule_entries.filter(date__gte=selected_start_date)
+        if selected_end_date:
+            schedule_entries = schedule_entries.filter(date__lte=selected_end_date)
+        schedule_table = _build_schedule_table(schedule_entries)
 
     context = {
         'institutes': institutes,
@@ -127,6 +151,10 @@ def home(request):
         'selected_institute': selected_institute,
         'selected_course': selected_course,
         'selected_group': selected_group,
+        'selected_start_date': selected_start_date,
+        'selected_end_date': selected_end_date,
+        'view_mode': view_mode,
+        'schedule_table': schedule_table,
         'schedule_entries': schedule_entries,
         'group_form': group_form,
         'entry_form': entry_form,
@@ -136,13 +164,19 @@ def home(request):
     return render(request, 'pages/home.html', context)
 
 
-def _schedule_url(group):
-    return (
-        f'{reverse("home")}'
-        f'?institute={group.institute_id}'
-        f'&course={group.course}'
-        f'&group={group.id}'
-    )
+def _schedule_url(group, view_mode=None, start_date=None, end_date=None):
+    params = {
+        'institute': group.institute_id,
+        'course': group.course,
+        'group': group.id,
+    }
+    if view_mode in {'list', 'table'}:
+        params['view'] = view_mode
+    if start_date:
+        params['start_date'] = start_date
+    if end_date:
+        params['end_date'] = end_date
+    return f'{reverse("home")}?{urlencode(params)}'
 
 
 def _as_int(value):
@@ -152,3 +186,60 @@ def _as_int(value):
         return int(value)
     except ValueError:
         return None
+
+
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _build_schedule_table(schedule_entries):
+    entries = list(schedule_entries)
+    time_slots = sorted({
+        (entry.start_time, entry.end_time)
+        for entry in entries
+    })
+    rows_by_date = {}
+
+    for entry in entries:
+        rows_by_date.setdefault(entry.date, {}).setdefault(
+            (entry.start_time, entry.end_time),
+            [],
+        ).append(entry)
+
+    rows = []
+    for lesson_date in sorted(rows_by_date):
+        day_slots = rows_by_date[lesson_date]
+        rows.append({
+            'date': lesson_date,
+            'weekday': _weekday_name(lesson_date),
+            'cells': [
+                {
+                    'slot': slot,
+                    'entries': day_slots.get(slot, []),
+                }
+                for slot in time_slots
+            ],
+        })
+
+    return {
+        'time_slots': time_slots,
+        'rows': rows,
+    }
+
+
+def _weekday_name(value):
+    weekdays = [
+        'Понедельник',
+        'Вторник',
+        'Среда',
+        'Четверг',
+        'Пятница',
+        'Суббота',
+        'Воскресенье',
+    ]
+    return weekdays[value.weekday()]

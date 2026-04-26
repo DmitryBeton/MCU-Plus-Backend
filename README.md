@@ -29,3 +29,19 @@ python manage.py runserver
 - следующая строка содержит даты по неделям;
 - колонка `время` содержит время пары;
 - ячейки на пересечении даты и времени содержат описание занятия.
+
+## API для мобильного приложения
+
+Основной API для iOS:
+
+```text
+GET /api/v1/catalog/
+GET /api/v1/schedule/?groupId=1&from=2026-02-09&to=2026-02-16
+```
+
+Старые технические endpoint-ы для отладки:
+
+```text
+GET /api/groups/
+GET /api/schedule/?group_id=1
+```

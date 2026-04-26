@@ -18,10 +18,15 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+from pages import api
 from pages import views
 
 urlpatterns = [
     path('', RedirectView.as_view(pattern_name='login', permanent=False)),
+    path('api/v1/catalog/', api.catalog, name='api_v1_catalog'),
+    path('api/v1/schedule/', api.schedule_v1, name='api_v1_schedule'),
+    path('api/groups/', api.group_list, name='api_groups'),
+    path('api/schedule/', api.schedule_detail, name='api_schedule'),
     path('admin/', admin.site.urls),
     path('accounts/', include('django.contrib.auth.urls')),
     path('home/', views.home, name='home'),

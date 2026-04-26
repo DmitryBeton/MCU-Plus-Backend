@@ -490,3 +490,190 @@ def _schedule_url(group):
         f'&course={group.course}'
         f'&group={group.id}'
     )
+
+
+class ScheduleApiTests(TestCase):
+    def setUp(self):
+        self.institute = Institute.objects.create(name='Институт цифрового образования')
+        self.group = StudyGroup.objects.create(
+            institute=self.institute,
+            course=2,
+            name='ЦИБ-241',
+        )
+        ScheduleEntry.objects.create(
+            group=self.group,
+            date='2026-02-09',
+            start_time='09:00',
+            end_time='10:20',
+            subject='Математический анализ',
+            teacher='Иванов И.И.',
+            room='101',
+            note='ЛК',
+        )
+        ScheduleEntry.objects.create(
+            group=self.group,
+            date='2026-02-16',
+            start_time='10:30',
+            end_time='11:50',
+            subject='Программирование',
+            teacher='Петров П.П.',
+            room='202',
+            note='ПР',
+        )
+
+    def test_groups_api_returns_available_groups(self):
+        response = self.client.get(reverse('api_groups'))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['groups'][0]['id'], self.group.id)
+        self.assertEqual(payload['groups'][0]['name'], 'ЦИБ-241')
+        self.assertEqual(payload['groups'][0]['institute']['name'], self.institute.name)
+
+    def test_v1_catalog_returns_institutes_with_groups(self):
+        response = self.client.get(reverse('api_v1_catalog'))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['institutes'][0]['id'], self.institute.id)
+        self.assertEqual(payload['institutes'][0]['name'], self.institute.name)
+        self.assertIn('shortName', payload['institutes'][0])
+        self.assertIn('logo', payload['institutes'][0])
+        self.assertEqual(payload['institutes'][0]['groups'][0]['id'], self.group.id)
+        self.assertEqual(payload['institutes'][0]['groups'][0]['name'], 'ЦИБ-241')
+
+    def test_groups_api_can_filter_by_course(self):
+        StudyGroup.objects.create(
+            institute=self.institute,
+            course=3,
+            name='ЦИБ-231',
+        )
+
+        response = self.client.get(reverse('api_groups'), {'course': 2})
+
+        self.assertEqual(response.status_code, 200)
+        groups = response.json()['groups']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['name'], 'ЦИБ-241')
+
+    def test_schedule_api_returns_lessons_for_group_id(self):
+        response = self.client.get(reverse('api_schedule'), {'group_id': self.group.id})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['group']['name'], 'ЦИБ-241')
+        self.assertEqual(len(payload['lessons']), 2)
+        self.assertEqual(payload['lessons'][0]['date'], '2026-02-09')
+        self.assertEqual(payload['lessons'][0]['start_time'], '09:00')
+        self.assertEqual(payload['lessons'][0]['subject'], 'Математический анализ')
+
+    def test_v1_schedule_api_returns_items_for_group_id(self):
+        response = self.client.get(reverse('api_v1_schedule'), {'groupId': self.group.id})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload['group']['id'], self.group.id)
+        self.assertEqual(payload['group']['instituteId'], self.institute.id)
+        self.assertEqual(len(payload['items']), 2)
+        self.assertEqual(payload['items'][0]['title'], 'Математический анализ')
+        self.assertEqual(payload['items'][0]['startAt'], '2026-02-09T09:00:00+03:00')
+        self.assertEqual(payload['items'][0]['endAt'], '2026-02-09T10:20:00+03:00')
+        self.assertEqual(payload['items'][0]['status'], 'active')
+        self.assertEqual(payload['items'][0]['comment'], 'ЛК')
+
+    def test_schedule_api_can_filter_lessons_by_period(self):
+        response = self.client.get(reverse('api_schedule'), {
+            'group_id': self.group.id,
+            'start_date': '2026-02-16',
+            'end_date': '2026-02-16',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        lessons = response.json()['lessons']
+        self.assertEqual(len(lessons), 1)
+        self.assertEqual(lessons[0]['subject'], 'Программирование')
+
+    def test_v1_schedule_api_can_filter_items_by_period(self):
+        response = self.client.get(reverse('api_v1_schedule'), {
+            'groupId': self.group.id,
+            'from': '2026-02-16',
+            'to': '2026-02-16',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        items = response.json()['items']
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['title'], 'Программирование')
+
+    def test_v1_schedule_api_reports_missing_group_id(self):
+        response = self.client.get(reverse('api_v1_schedule'))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_v1_schedule_api_detects_lesson_status(self):
+        ScheduleEntry.objects.create(
+            group=self.group,
+            date='2026-02-23',
+            start_time='12:40',
+            end_time='14:00',
+            subject='Базы данных',
+            room='Дистанционно',
+            note='Подключение через Teams',
+        )
+        ScheduleEntry.objects.create(
+            group=self.group,
+            date='2026-02-24',
+            start_time='12:40',
+            end_time='14:00',
+            subject='Алгебра',
+            note='Пара отменена',
+        )
+        ScheduleEntry.objects.create(
+            group=self.group,
+            date='2026-02-25',
+            start_time='12:40',
+            end_time='14:00',
+            subject='Геометрия',
+            note='Замена преподавателя',
+        )
+
+        response = self.client.get(reverse('api_v1_schedule'), {'groupId': self.group.id})
+
+        statuses = {
+            item['title']: item['status']
+            for item in response.json()['items']
+        }
+        self.assertEqual(statuses['Базы данных'], 'online')
+        self.assertEqual(statuses['Алгебра'], 'cancelled')
+        self.assertEqual(statuses['Геометрия'], 'replaced')
+
+    def test_schedule_api_accepts_group_name_with_course(self):
+        response = self.client.get(reverse('api_schedule'), {
+            'group_name': 'ЦИБ-241',
+            'course': 2,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['group']['id'], self.group.id)
+
+    def test_schedule_api_requires_group(self):
+        response = self.client.get(reverse('api_schedule'))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_schedule_api_reports_ambiguous_group_name(self):
+        other_institute = Institute.objects.create(name='Другой институт')
+        StudyGroup.objects.create(
+            institute=other_institute,
+            course=2,
+            name='ЦИБ-241',
+        )
+
+        response = self.client.get(reverse('api_schedule'), {'group_name': 'ЦИБ-241'})
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertIn('matches', payload)
+        self.assertEqual(len(payload['matches']), 2)

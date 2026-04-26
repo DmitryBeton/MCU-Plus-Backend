@@ -4,20 +4,230 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Главная | MCU Plus</title>
+    <title>Расписание | MCU Plus</title>
     <link rel="stylesheet" href="{% static 'css/site.css' %}">
 </head>
 <body>
-    <main class="empty-page">
-        <section class="empty-state" aria-labelledby="home-title">
+    <header class="app-header">
+        <div>
             <p class="eyebrow">MCU Plus</p>
-            <h1 id="home-title">Пустая страница</h1>
-            <p>Вы вошли в аккаунт. Здесь позже появится содержимое сайта.</p>
+            <h1>Расписание занятий</h1>
+        </div>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="secondary-button">Выйти</button>
+        </form>
+    </header>
 
-            <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit" class="secondary-button">Выйти</button>
-            </form>
+    <main class="schedule-page">
+        {% if messages %}
+            <section class="messages" aria-label="Уведомления">
+                {% for message in messages %}
+                    <p class="message {{ message.tags }}">{{ message }}</p>
+                {% endfor %}
+            </section>
+        {% endif %}
+
+        <section class="workspace-grid">
+            <aside class="tool-panel" aria-labelledby="group-create-title">
+                <h2 id="group-create-title">Добавить группу</h2>
+                <form method="post" class="stacked-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="create_group">
+
+                    {{ group_form.non_field_errors }}
+
+                    <label for="{{ group_form.institute_name.id_for_label }}">Институт</label>
+                    {{ group_form.institute_name }}
+                    {{ group_form.institute_name.errors }}
+
+                    <div class="form-row">
+                        <div>
+                            <label for="{{ group_form.course.id_for_label }}">Курс</label>
+                            {{ group_form.course }}
+                            {{ group_form.course.errors }}
+                        </div>
+                        <div>
+                            <label for="{{ group_form.group_name.id_for_label }}">Группа</label>
+                            {{ group_form.group_name }}
+                            {{ group_form.group_name.errors }}
+                        </div>
+                    </div>
+
+                    <button type="submit">Сохранить группу</button>
+                </form>
+            </aside>
+
+            <section class="main-panel" aria-labelledby="schedule-title">
+                <form method="get" class="filters">
+                    <label>
+                        Институт
+                        <select name="institute">
+                            <option value="">Все институты</option>
+                            {% for institute in institutes %}
+                                <option value="{{ institute.id }}" {% if selected_institute.id == institute.id %}selected{% endif %}>
+                                    {{ institute.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <label>
+                        Курс
+                        <select name="course">
+                            <option value="">Все курсы</option>
+                            {% for course in courses %}
+                                <option value="{{ course }}" {% if selected_course == course %}selected{% endif %}>
+                                    {{ course }} курс
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <label>
+                        Группа
+                        <select name="group">
+                            <option value="">Выберите группу</option>
+                            {% for group in groups %}
+                                <option value="{{ group.id }}" {% if selected_group.id == group.id %}selected{% endif %}>
+                                    {{ group.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <button type="submit">Показать</button>
+                </form>
+
+                <div class="section-heading">
+                    <div>
+                        <h2 id="schedule-title">
+                            {% if selected_group %}
+                                {{ selected_group.name }}, {{ selected_group.course }} курс
+                            {% else %}
+                                Выберите группу
+                            {% endif %}
+                        </h2>
+                        {% if selected_group %}
+                            <p>{{ selected_group.institute.name }}</p>
+                        {% else %}
+                            <p>Создайте группу слева или выберите уже существующую.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if selected_group %}
+                    <form method="post" class="entry-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="{% if edit_entry %}update_entry{% else %}create_entry{% endif %}">
+                        <input type="hidden" name="group" value="{{ selected_group.id }}">
+                        {% if edit_entry %}
+                            <input type="hidden" name="entry" value="{{ edit_entry.id }}">
+                        {% endif %}
+
+                        {{ entry_form.non_field_errors }}
+
+                        <div class="form-row">
+                            <div>
+                                <label for="{{ entry_form.date.id_for_label }}">Дата</label>
+                                {{ entry_form.date }}
+                                {{ entry_form.date.errors }}
+                            </div>
+                            <div>
+                                <label for="{{ entry_form.start_time.id_for_label }}">Начало</label>
+                                {{ entry_form.start_time }}
+                                {{ entry_form.start_time.errors }}
+                            </div>
+                            <div>
+                                <label for="{{ entry_form.end_time.id_for_label }}">Конец</label>
+                                {{ entry_form.end_time }}
+                                {{ entry_form.end_time.errors }}
+                            </div>
+                        </div>
+
+                        <div class="form-row two-columns">
+                            <div>
+                                <label for="{{ entry_form.subject.id_for_label }}">Дисциплина</label>
+                                {{ entry_form.subject }}
+                                {{ entry_form.subject.errors }}
+                            </div>
+                            <div>
+                                <label for="{{ entry_form.teacher.id_for_label }}">Преподаватель</label>
+                                {{ entry_form.teacher }}
+                                {{ entry_form.teacher.errors }}
+                            </div>
+                        </div>
+
+                        <div class="form-row two-columns">
+                            <div>
+                                <label for="{{ entry_form.room.id_for_label }}">Аудитория</label>
+                                {{ entry_form.room }}
+                                {{ entry_form.room.errors }}
+                            </div>
+                            <div>
+                                <label for="{{ entry_form.note.id_for_label }}">Заметка</label>
+                                {{ entry_form.note }}
+                                {{ entry_form.note.errors }}
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit">{% if edit_entry %}Сохранить изменения{% else %}Добавить занятие{% endif %}</button>
+                            {% if edit_entry %}
+                                <a class="text-button" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}">
+                                    Отменить
+                                </a>
+                            {% endif %}
+                        </div>
+                    </form>
+
+                    <div class="schedule-list">
+                        {% for entry in schedule_entries %}
+                            <article class="lesson-item">
+                                <div class="lesson-date">
+                                    <strong>{{ entry.date|date:"d.m" }}</strong>
+                                    <span>{{ entry.date|date:"D" }}</span>
+                                </div>
+                                <div class="lesson-body">
+                                    <div class="lesson-topline">
+                                        <h3>{{ entry.subject }}</h3>
+                                        <span>{{ entry.start_time|time:"H:i" }} - {{ entry.end_time|time:"H:i" }}</span>
+                                    </div>
+                                    <p>
+                                        {% if entry.teacher %}{{ entry.teacher }}{% else %}Преподаватель не указан{% endif %}
+                                        {% if entry.room %} · {{ entry.room }}{% endif %}
+                                    </p>
+                                    {% if entry.note %}
+                                        <p class="lesson-note">{{ entry.note }}</p>
+                                    {% endif %}
+                                </div>
+                                <div class="lesson-actions">
+                                    <a class="text-button" href="{% url 'home' %}?institute={{ selected_group.institute_id }}&course={{ selected_group.course }}&group={{ selected_group.id }}&edit={{ entry.id }}">
+                                        Изменить
+                                    </a>
+                                    <form method="post">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_entry">
+                                        <input type="hidden" name="group" value="{{ selected_group.id }}">
+                                        <input type="hidden" name="entry" value="{{ entry.id }}">
+                                        <button type="submit" class="danger-button">Удалить</button>
+                                    </form>
+                                </div>
+                            </article>
+                        {% empty %}
+                            <div class="blank-slate">
+                                <h3>Занятий пока нет</h3>
+                                <p>Добавьте первое занятие для выбранной группы. Каждая дата хранится отдельно, поэтому расписание может отличаться каждую неделю.</p>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="blank-slate">
+                        <h3>Нет выбранной группы</h3>
+                        <p>После выбора группы здесь появится форма добавления занятий и список расписания.</p>
+                    </div>
+                {% endif %}
+            </section>
         </section>
     </main>
 </body>

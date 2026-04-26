@@ -3,6 +3,21 @@ from django import forms
 from .models import ScheduleEntry
 
 
+class ScheduleJsonUploadForm(forms.Form):
+    file = forms.FileField(
+        label='JSON-файл',
+        widget=forms.FileInput(attrs={'accept': 'application/json,.json'}),
+    )
+
+    def clean_file(self):
+        uploaded_file = self.cleaned_data['file']
+        if not uploaded_file.name.lower().endswith('.json'):
+            raise forms.ValidationError('Загрузите файл в формате .json.')
+        if uploaded_file.size > 5 * 1024 * 1024:
+            raise forms.ValidationError('Файл слишком большой. Максимум 5 МБ.')
+        return uploaded_file
+
+
 class GroupCreateForm(forms.Form):
     institute_name = forms.CharField(
         label='Институт',

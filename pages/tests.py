@@ -1,4 +1,7 @@
+import json
+
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
@@ -155,6 +158,134 @@ class ScheduleManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Время окончания должно быть позже времени начала.')
         self.assertEqual(ScheduleEntry.objects.count(), 0)
+
+    def test_can_import_schedule_from_json_file(self):
+        payload = {
+            'entries': [
+                {
+                    'institute': 'Институт цифрового образования',
+                    'course': 2,
+                    'group': 'ИВТ-231',
+                    'date': '2026-09-01',
+                    'start_time': '09:00',
+                    'end_time': '10:30',
+                    'subject': 'Математический анализ',
+                    'teacher': 'Иванов И.И.',
+                    'room': '101',
+                    'note': 'Лекция',
+                },
+                {
+                    'institute': 'Институт цифрового образования',
+                    'course': 2,
+                    'group': 'ИВТ-231',
+                    'date': '2026-09-01',
+                    'start_time': '10:40',
+                    'end_time': '12:10',
+                    'subject': 'Программирование',
+                    'teacher': 'Петров П.П.',
+                    'room': '202',
+                    'note': 'Практика',
+                },
+            ],
+        }
+        uploaded_file = SimpleUploadedFile(
+            'schedule.json',
+            json.dumps(payload).encode('utf-8'),
+            content_type='application/json',
+        )
+
+        response = self.client.post(reverse('home'), {
+            'action': 'import_schedule',
+            'file': uploaded_file,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Institute.objects.count(), 1)
+        self.assertEqual(StudyGroup.objects.count(), 1)
+        self.assertEqual(ScheduleEntry.objects.count(), 2)
+        self.assertEqual(ScheduleEntry.objects.first().subject, 'Математический анализ')
+
+    def test_can_import_nested_schedule_json_file(self):
+        payload = {
+            'institutes': [
+                {
+                    'name': 'Институт экономики',
+                    'groups': [
+                        {
+                            'name': 'ЭК-101',
+                            'course': 1,
+                            'lessons': [
+                                {
+                                    'date': '01.09.2026',
+                                    'start_time': '09:00',
+                                    'end_time': '10:30',
+                                    'subject': 'Экономика',
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+        uploaded_file = SimpleUploadedFile(
+            'schedule.json',
+            json.dumps(payload).encode('utf-8'),
+            content_type='application/json',
+        )
+
+        response = self.client.post(reverse('home'), {
+            'action': 'import_schedule',
+            'file': uploaded_file,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        entry = ScheduleEntry.objects.get()
+        self.assertEqual(entry.group.institute.name, 'Институт экономики')
+        self.assertEqual(entry.group.name, 'ЭК-101')
+        self.assertEqual(entry.subject, 'Экономика')
+
+    def test_import_updates_existing_entry(self):
+        institute = Institute.objects.create(name='Институт цифрового образования')
+        group = StudyGroup.objects.create(institute=institute, course=2, name='ИВТ-231')
+        ScheduleEntry.objects.create(
+            group=group,
+            date='2026-09-01',
+            start_time='09:00',
+            end_time='10:30',
+            subject='Математический анализ',
+            room='101',
+        )
+        payload = {
+            'entries': [
+                {
+                    'institute': institute.name,
+                    'course': 2,
+                    'group': group.name,
+                    'date': '2026-09-01',
+                    'start_time': '09:00',
+                    'end_time': '10:30',
+                    'subject': 'Математический анализ',
+                    'teacher': 'Иванов И.И.',
+                    'room': '301',
+                },
+            ],
+        }
+        uploaded_file = SimpleUploadedFile(
+            'schedule.json',
+            json.dumps(payload).encode('utf-8'),
+            content_type='application/json',
+        )
+
+        response = self.client.post(reverse('home'), {
+            'action': 'import_schedule',
+            'file': uploaded_file,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(ScheduleEntry.objects.count(), 1)
+        entry = ScheduleEntry.objects.get()
+        self.assertEqual(entry.teacher, 'Иванов И.И.')
+        self.assertEqual(entry.room, '301')
 
 
 def _schedule_url(group):

@@ -56,6 +56,23 @@
 
                     <button type="submit">Сохранить группу</button>
                 </form>
+
+                <div class="panel-divider"></div>
+
+                <h2>Импорт расписания</h2>
+                <form method="post" enctype="multipart/form-data" class="stacked-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="import_schedule">
+
+                    {{ upload_form.non_field_errors }}
+
+                    <label for="{{ upload_form.file.id_for_label }}">JSON-файл</label>
+                    {{ upload_form.file }}
+                    {{ upload_form.file.errors }}
+
+                    <p class="upload-note">Можно загрузить готовое расписание списком занятий или структурой институтов и групп.</p>
+                    <button type="submit">Загрузить JSON</button>
+                </form>
             </aside>
 
             <section class="main-panel" aria-labelledby="schedule-title">

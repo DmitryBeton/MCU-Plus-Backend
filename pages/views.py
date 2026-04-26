@@ -1,9 +1,11 @@
-from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from .forms import GroupCreateForm, ScheduleEntryForm
+from .forms import GroupCreateForm, ScheduleEntryForm, ScheduleJsonUploadForm
+from .importers import import_schedule_json
 from .models import Institute, ScheduleEntry, StudyGroup
 
 
@@ -15,6 +17,7 @@ def home(request):
     edit_entry_id = _as_int(request.GET.get('edit'))
     group_form = GroupCreateForm()
     entry_form = ScheduleEntryForm()
+    upload_form = ScheduleJsonUploadForm()
 
     selected_institute = Institute.objects.filter(id=selected_institute_id).first()
     selected_group = StudyGroup.objects.select_related('institute').filter(id=selected_group_id).first()
@@ -39,6 +42,25 @@ def home(request):
                 )
                 messages.success(request, 'Группа добавлена.')
                 return redirect(_schedule_url(group=group))
+
+        elif action == 'import_schedule':
+            upload_form = ScheduleJsonUploadForm(request.POST, request.FILES)
+            if upload_form.is_valid():
+                try:
+                    summary = import_schedule_json(upload_form.cleaned_data['file'])
+                except ValidationError as error:
+                    messages.error(request, ' '.join(error.messages))
+                else:
+                    messages.success(
+                        request,
+                        (
+                            'Импорт завершен: '
+                            f'создано занятий {summary.entries_created}, '
+                            f'обновлено {summary.entries_updated}, '
+                            f'новых групп {summary.groups_created}.'
+                        ),
+                    )
+                    return redirect('home')
 
         elif action in {'create_entry', 'update_entry'}:
             selected_group = get_object_or_404(StudyGroup, id=request.POST.get('group'))
@@ -108,6 +130,7 @@ def home(request):
         'schedule_entries': schedule_entries,
         'group_form': group_form,
         'entry_form': entry_form,
+        'upload_form': upload_form,
         'edit_entry': edit_entry,
     }
     return render(request, 'pages/home.html', context)

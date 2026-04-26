@@ -245,6 +245,18 @@ button:hover {
     padding: 24px;
 }
 
+.panel-divider {
+    border-top: 1px solid #edf1f6;
+    margin: 24px 0;
+}
+
+.upload-note {
+    color: #667085;
+    font-size: 14px;
+    line-height: 1.45;
+    margin-bottom: 0;
+}
+
 .form-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

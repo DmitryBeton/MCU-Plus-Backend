@@ -108,6 +108,33 @@ def home(request):
                 end_date=request.POST.get('end_date'),
             ))
 
+        elif action == 'delete_group':
+            group = get_object_or_404(StudyGroup, id=request.POST.get('group'))
+            group_name = group.name
+            lessons_count = group.schedule_entries.count()
+            institute = group.institute
+            group.delete()
+            messages.success(
+                request,
+                f'Группа {group_name} удалена. Удалено занятий: {lessons_count}.',
+            )
+            return redirect(_institute_url(institute))
+
+        elif action == 'delete_institute':
+            institute = get_object_or_404(Institute, id=request.POST.get('institute'))
+            institute_name = institute.name
+            groups_count = institute.groups.count()
+            lessons_count = ScheduleEntry.objects.filter(group__institute=institute).count()
+            institute.delete()
+            messages.success(
+                request,
+                (
+                    f'Институт {institute_name} удален. '
+                    f'Удалено групп: {groups_count}, занятий: {lessons_count}.'
+                ),
+            )
+            return redirect('home')
+
     if selected_group:
         selected_institute = selected_group.institute
         selected_course = selected_group.course
@@ -177,6 +204,10 @@ def _schedule_url(group, view_mode=None, start_date=None, end_date=None):
     if end_date:
         params['end_date'] = end_date
     return f'{reverse("home")}?{urlencode(params)}'
+
+
+def _institute_url(institute):
+    return f'{reverse("home")}?{urlencode({"institute": institute.id})}'
 
 
 def _as_int(value):

@@ -235,6 +235,56 @@ class ScheduleManagementTests(TestCase):
         self.assertContains(response, 'Статистика')
         self.assertNotContains(response, 'Микроэкономика')
 
+    def test_can_delete_group_with_schedule_entries(self):
+        institute = Institute.objects.create(name='Институт цифрового образования')
+        group = StudyGroup.objects.create(
+            institute=institute,
+            course=2,
+            name='ИВТ-231',
+        )
+        ScheduleEntry.objects.create(
+            group=group,
+            date='2026-09-01',
+            start_time='09:00',
+            end_time='10:30',
+            subject='Математический анализ',
+        )
+
+        response = self.client.post(reverse('home'), {
+            'action': 'delete_group',
+            'group': group.id,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Institute.objects.filter(id=institute.id).exists())
+        self.assertFalse(StudyGroup.objects.filter(id=group.id).exists())
+        self.assertEqual(ScheduleEntry.objects.count(), 0)
+
+    def test_can_delete_institute_with_groups_and_schedule_entries(self):
+        institute = Institute.objects.create(name='Институт экономики')
+        group = StudyGroup.objects.create(
+            institute=institute,
+            course=1,
+            name='ЭК-101',
+        )
+        ScheduleEntry.objects.create(
+            group=group,
+            date='2026-09-01',
+            start_time='09:00',
+            end_time='10:30',
+            subject='Микроэкономика',
+        )
+
+        response = self.client.post(reverse('home'), {
+            'action': 'delete_institute',
+            'institute': institute.id,
+        })
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Institute.objects.filter(id=institute.id).exists())
+        self.assertEqual(StudyGroup.objects.count(), 0)
+        self.assertEqual(ScheduleEntry.objects.count(), 0)
+
     def test_can_import_schedule_from_json_file(self):
         payload = {
             'entries': [

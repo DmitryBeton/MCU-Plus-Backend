@@ -336,6 +336,36 @@ button:hover {
     padding: 18px;
 }
 
+.danger-zone {
+    display: grid;
+    gap: 12px;
+    border: 1px solid #ffd1cc;
+    border-radius: 8px;
+    background: #fff8f7;
+    padding: 16px;
+}
+
+.danger-zone h2,
+.danger-zone h3 {
+    color: #9f1e14;
+    margin-bottom: 8px;
+}
+
+.danger-zone p {
+    color: #667085;
+    margin-bottom: 0;
+}
+
+.danger-actions {
+    display: grid;
+    gap: 10px;
+}
+
+.danger-actions form,
+.danger-actions button {
+    width: 100%;
+}
+
 .form-actions {
     display: flex;
     align-items: center;

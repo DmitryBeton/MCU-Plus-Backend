@@ -73,6 +73,39 @@
                     <p class="upload-note">Можно загрузить готовое расписание списком занятий или структурой институтов и групп.</p>
                     <button type="submit">Загрузить JSON</button>
                 </form>
+
+                {% if selected_institute %}
+                    <div class="panel-divider"></div>
+
+                    <div class="danger-zone">
+                        <div>
+                            <h2>Удаление</h2>
+                            <p>
+                                {% if selected_group %}
+                                    Можно удалить выбранную группу или весь институт вместе с его группами и занятиями.
+                                {% else %}
+                                    Можно удалить выбранный институт вместе со всеми его группами и занятиями.
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="danger-actions">
+                            {% if selected_group %}
+                                <form method="post" data-confirm="Удалить группу {{ selected_group.name }} и все ее занятия?">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete_group">
+                                    <input type="hidden" name="group" value="{{ selected_group.id }}">
+                                    <button type="submit" class="danger-button">Удалить группу</button>
+                                </form>
+                            {% endif %}
+                            <form method="post" data-confirm="Удалить институт {{ selected_institute.name }} вместе со всеми группами и занятиями?">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_institute">
+                                <input type="hidden" name="institute" value="{{ selected_institute.id }}">
+                                <button type="submit" class="danger-button">Удалить институт</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endif %}
             </aside>
 
             <section class="main-panel" aria-labelledby="schedule-title">
@@ -304,14 +337,14 @@
                                         </a>
                                         <form method="post">
                                             {% csrf_token %}
-                                        <input type="hidden" name="action" value="delete_entry">
-                                        <input type="hidden" name="group" value="{{ selected_group.id }}">
-                                        <input type="hidden" name="entry" value="{{ entry.id }}">
-                                        <input type="hidden" name="view" value="{{ view_mode }}">
-                                        <input type="hidden" name="start_date" value="{{ selected_start_date|date:'Y-m-d' }}">
-                                        <input type="hidden" name="end_date" value="{{ selected_end_date|date:'Y-m-d' }}">
-                                        <button type="submit" class="danger-button">Удалить</button>
-                                    </form>
+                                            <input type="hidden" name="action" value="delete_entry">
+                                            <input type="hidden" name="group" value="{{ selected_group.id }}">
+                                            <input type="hidden" name="entry" value="{{ entry.id }}">
+                                            <input type="hidden" name="view" value="{{ view_mode }}">
+                                            <input type="hidden" name="start_date" value="{{ selected_start_date|date:'Y-m-d' }}">
+                                            <input type="hidden" name="end_date" value="{{ selected_end_date|date:'Y-m-d' }}">
+                                            <button type="submit" class="danger-button">Удалить</button>
+                                        </form>
                                     </div>
                                 </article>
                             {% empty %}
